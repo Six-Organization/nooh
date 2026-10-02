@@ -1,0 +1,56 @@
+// Prisma schema — noh-app
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Ukuran produk. Untuk alas = kapasitas; untuk item = ukuran item.
+enum Size {
+  KECIL
+  SEDANG
+  BESAR
+}
+
+/// Kategori/tag produk (mis. dupa, alas sok, isian). Dikelola admin.
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[] @relation("ProductCategories")
+}
+
+/// Produk satuan: HPP (modal), harga jual, stok, foto, ukuran, dan kategori.
+model Product {
+  id            Int            @id @default(autoincrement())
+  name          String
+  hpp           Int // harga beli / modal per unit (Rupiah)
+  sellPrice     Int // harga jual per unit (Rupiah)
+  stock         Int            @default(0)
+  imageUrl      String? // URL foto produk (Vercel Blob)
+  size          Size? // ukuran item / kapasitas alas
+  isBase        Boolean        @default(false) // true = alas (base parcel)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  categories    Category[]     @relation("ProductCategories")
+  leadTimeTiers LeadTimeTier[] // waktu pengerjaan per jumlah pcs (khusus alas)
+}
+
+/// Tier waktu pengerjaan alas: jumlah pcs -> berapa hari kerja.
+/// mis. Alas Bokor: 1-10 pcs = 3 hari, 11-50 pcs = 7 hari, 51+ = 14 hari.
+model LeadTimeTier {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty    Int // batas bawah jumlah pcs (inklusif)
+  maxQty    Int? // batas atas (inklusif); null = tanpa batas atas
+  days      Int // estimasi hari pengerjaan (hari kalender)
+
+  @@index([productId])
+}
