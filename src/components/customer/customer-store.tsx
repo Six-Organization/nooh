@@ -281,6 +281,11 @@ function ItemCard({ product, enabled }: { product: Product; enabled: boolean }) 
   const items = useParcel((s) => s.items);
   const add = useParcel((s) => s.add);
 
+  const cost = product.size ? ITEM_POINTS[product.size] : 0;
+  const remaining = base ? capacityOf(base) - usedPoints(items) : null;
+  // Tidak muat: alas sudah dipilih tapi sisa poin < kebutuhan item ini.
+  const tooBig = remaining !== null && cost > remaining;
+
   function tryAdd() {
     if (!base) {
       toast.error("Pilih alas dulu sebelum menambah item.");
@@ -306,7 +311,11 @@ function ItemCard({ product, enabled }: { product: Product; enabled: boolean }) 
   }
 
   return (
-    <Card className="gap-0 overflow-hidden p-0 transition hover:-translate-y-1">
+    <Card
+      className={`gap-0 overflow-hidden p-0 transition ${
+        tooBig ? "opacity-60" : "hover:-translate-y-1"
+      }`}
+    >
       <div className="relative">
         <ProductImage product={product} />
         {product.size && (
@@ -334,14 +343,26 @@ function ItemCard({ product, enabled }: { product: Product; enabled: boolean }) 
         <p className="text-sm font-medium text-[color:var(--gold-hi)]">
           {rupiah(product.sellPrice)}
         </p>
-        <Button
-          size="sm"
-          className="btn-gold-grad mt-auto"
-          disabled={!enabled}
-          onClick={tryAdd}
-        >
-          <Plus className="h-4 w-4" /> Tambah
-        </Button>
+        {tooBig ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-auto cursor-not-allowed"
+            disabled
+            title={`Butuh ${cost} poin, sisa ${remaining} poin`}
+          >
+            Tidak muat ({cost}p)
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="btn-gold-grad mt-auto"
+            disabled={!enabled}
+            onClick={tryAdd}
+          >
+            <Plus className="h-4 w-4" /> Tambah
+          </Button>
+        )}
       </div>
     </Card>
   );
