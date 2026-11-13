@@ -2,7 +2,12 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { ALAS_CAPACITY, ITEM_POINTS, type Size } from "@/lib/capacity";
+import {
+  ITEM_POINTS,
+  capacityFor,
+  type CapacityMatrix,
+  type Size,
+} from "@/lib/capacity";
 import type { LeadTier } from "@/lib/leadtime";
 
 export type ParcelBase = {
@@ -10,8 +15,16 @@ export type ParcelBase = {
   name: string;
   sellPrice: number;
   imageUrl: string | null;
-  size: Size; // kapasitas alas
+  size: Size; // ukuran alas (dimensi matrix)
   tiers: LeadTier[]; // waktu pengerjaan per pcs
+};
+
+export type ParcelPacking = {
+  id: number;
+  name: string;
+  sellPrice: number;
+  imageUrl: string | null;
+  size: Size; // ukuran packing (dimensi matrix)
 };
 
 export type ParcelItem = {
@@ -25,11 +38,14 @@ export type ParcelItem = {
 
 type ParcelState = {
   base: ParcelBase | null;
+  packing: ParcelPacking | null;
   items: Record<number, ParcelItem>;
   pcs: number; // jumlah salinan parcel yang dipesan
   deliveryDate: string; // yyyy-mm-dd tanggal ambil/kirim
   setBase: (base: ParcelBase) => void;
   clearBase: () => void;
+  setPacking: (packing: ParcelPacking) => void;
+  clearPacking: () => void;
   setPcs: (pcs: number) => void;
   setDeliveryDate: (date: string) => void;
   add: (item: Omit<ParcelItem, "qty">) => void;
@@ -38,15 +54,26 @@ type ParcelState = {
   clear: () => void;
 };
 
+const EMPTY = {
+  base: null,
+  packing: null,
+  items: {},
+  pcs: 1,
+  deliveryDate: "",
+} as const;
+
 export const useParcel = create<ParcelState>()(
   persist(
     (set) => ({
       base: null,
+      packing: null,
       items: {},
       pcs: 1,
       deliveryDate: "",
       setBase: (base) => set({ base }),
-      clearBase: () => set({ base: null, items: {}, pcs: 1, deliveryDate: "" }),
+      clearBase: () => set({ ...EMPTY }),
+      setPacking: (packing) => set({ packing }),
+      clearPacking: () => set({ packing: null }),
       setPcs: (pcs) => set({ pcs: pcs < 1 ? 1 : Math.floor(pcs) }),
       setDeliveryDate: (deliveryDate) => set({ deliveryDate }),
       add: (item) =>
@@ -78,7 +105,7 @@ export const useParcel = create<ParcelState>()(
           delete rest[id];
           return { items: rest };
         }),
-      clear: () => set({ base: null, items: {}, pcs: 1, deliveryDate: "" }),
+      clear: () => set({ ...EMPTY }),
     }),
     { name: "noh-parcel" }
   )
@@ -96,28 +123,34 @@ export function usedPoints(items: Record<number, ParcelItem>): number {
   );
 }
 
-/** Kapasitas poin alas terpilih (0 kalau belum pilih alas). */
-export function capacityOf(base: ParcelBase | null): number {
-  return base ? ALAS_CAPACITY[base.size] : 0;
+/** Kapasitas poin dari kombinasi alas × packing (0 kalau belum lengkap). */
+export function capacityOf(
+  base: ParcelBase | null,
+  packing: ParcelPacking | null,
+  matrix: CapacityMatrix
+): number {
+  return capacityFor(matrix, base?.size ?? null, packing?.size ?? null);
 }
 
-/** Harga satu parcel = harga alas + total harga item. */
+/** Harga satu parcel = harga alas + harga packing + total harga item. */
 export function parcelUnitTotal(
   base: ParcelBase | null,
+  packing: ParcelPacking | null,
   items: Record<number, ParcelItem>
 ): number {
   const itemsTotal = parcelItemList(items).reduce(
     (sum, i) => sum + i.sellPrice * i.qty,
     0
   );
-  return (base?.sellPrice ?? 0) + itemsTotal;
+  return (base?.sellPrice ?? 0) + (packing?.sellPrice ?? 0) + itemsTotal;
 }
 
 /** Total harga = harga per parcel x jumlah pcs. */
 export function parcelTotal(
   base: ParcelBase | null,
+  packing: ParcelPacking | null,
   items: Record<number, ParcelItem>,
   pcs: number
 ): number {
-  return parcelUnitTotal(base, items) * Math.max(1, pcs);
+  return parcelUnitTotal(base, packing, items) * Math.max(1, pcs);
 }

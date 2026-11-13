@@ -32,7 +32,7 @@ import {
 } from "@/lib/actions/products";
 
 type Size = "KECIL" | "SEDANG" | "BESAR";
-type ProductType = "COMPONENT" | "ALAS" | "BUNDLE";
+type ProductType = "COMPONENT" | "ALAS" | "PACKING" | "BUNDLE";
 const SIZE_LABELS: Record<Size, string> = {
   KECIL: "Kecil",
   SEDANG: "Sedang",
@@ -41,6 +41,7 @@ const SIZE_LABELS: Record<Size, string> = {
 const TYPE_LABELS: Record<ProductType, string> = {
   COMPONENT: "Komponen",
   ALAS: "Alas",
+  PACKING: "Packing",
   BUNDLE: "Bundle",
 };
 
@@ -284,6 +285,7 @@ function ProductForm({
   const isBundle = type === "BUNDLE";
   const isAlas = type === "ALAS";
   const isComponent = type === "COMPONENT";
+  const isPacking = type === "PACKING";
 
   const profit = (Number(sellPrice) || 0) - (Number(hpp) || 0);
   const markup =
@@ -352,8 +354,8 @@ function ProductForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (isComponent && !size) {
-      toast.error("Item satuan wajib punya ukuran.");
+    if ((isComponent || isPacking) && !size) {
+      toast.error("Item / packing wajib punya ukuran.");
       return;
     }
 
@@ -437,13 +439,16 @@ function ProductForm({
         >
           <option value="COMPONENT">Komponen (item satuan untuk rakit)</option>
           <option value="ALAS">Alas (base parcel)</option>
+          <option value="PACKING">Packing (pembungkus, dipilih di rakit)</option>
           <option value="BUNDLE">Bundle (produk jadi / katalog)</option>
         </select>
         <p className="text-xs text-muted-foreground">
           {isBundle
             ? "Harga & waktu diatur per jenjang jumlah pcs di bawah."
             : isAlas
-            ? "Alas punya kapasitas + waktu pengerjaan per pcs."
+            ? "Alas punya ukuran + waktu pengerjaan per pcs. Kapasitas dari matrix alas×packing."
+            : isPacking
+            ? "Packing dipilih customer bersama alas; kapasitas dari matrix alas×packing."
             : "Komponen dipakai di halaman rakit custom."}
         </p>
       </div>
@@ -504,7 +509,11 @@ function ProductForm({
         <div className="space-y-3 rounded-lg border p-3">
           <div className="space-y-2">
             <Label htmlFor="size">
-              {isAlas ? "Kapasitas alas" : "Ukuran item"}
+              {isAlas
+                ? "Ukuran alas"
+                : isPacking
+                ? "Ukuran packing"
+                : "Ukuran item"}
             </Label>
             <select
               id="size"
@@ -512,16 +521,16 @@ function ProductForm({
               onChange={(e) => setSize(e.target.value as Size | "")}
               className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="">
-                {isAlas ? "— pilih kapasitas —" : "— pilih ukuran (wajib) —"}
-              </option>
+              <option value="">— pilih ukuran (wajib) —</option>
               <option value="KECIL">Kecil</option>
               <option value="SEDANG">Sedang</option>
               <option value="BESAR">Besar</option>
             </select>
-            {isComponent && (
+            {(isComponent || isPacking) && (
               <p className="text-xs text-muted-foreground">
-                Item satuan wajib punya ukuran.
+                {isPacking
+                  ? "Ukuran packing dipakai di matrix kapasitas."
+                  : "Item satuan wajib punya ukuran."}
               </p>
             )}
           </div>

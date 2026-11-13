@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Minus, Trash2, ShoppingBasket, Send, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,11 @@ import {
 } from "@/components/ui/dialog";
 import { rupiah } from "@/lib/format";
 import {
-  ALAS_CAPACITY,
   ITEM_POINTS,
   SIZE_LABELS,
+  capacityFor,
   type Size,
+  type CapacityMatrix,
 } from "@/lib/capacity";
 import {
   leadDaysFor,
@@ -42,6 +43,7 @@ import {
 
 type Category = { id: number; name: string };
 type LeadTier = { minQty: number; maxQty: number | null; days: number };
+type ProductType = "COMPONENT" | "ALAS" | "PACKING" | "BUNDLE";
 type Product = {
   id: number;
   name: string;
@@ -50,78 +52,109 @@ type Product = {
   imageUrl: string | null;
   size: Size | null;
   isBase: boolean;
+  type: ProductType;
   categories: Category[];
   leadTimeTiers: LeadTier[];
 };
 
+const MatrixCtx = createContext<CapacityMatrix | null>(null);
+function useMatrix(): CapacityMatrix {
+  const m = useContext(MatrixCtx);
+  if (!m) throw new Error("MatrixCtx tidak tersedia.");
+  return m;
+}
+
 export function CustomerStore({
   products,
   categories,
+  matrix,
 }: {
   products: Product[];
   categories: Category[];
+  matrix: CapacityMatrix;
 }) {
   const [activeCat, setActiveCat] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const bases = products.filter((p) => p.isBase);
-  const items = products.filter((p) => !p.isBase);
+  const bases = products.filter((p) => p.type === "ALAS");
+  const packings = products.filter((p) => p.type === "PACKING");
+  const items = products.filter((p) => p.type === "COMPONENT");
   const filteredItems =
     activeCat === null
       ? items
       : items.filter((p) => p.categories.some((c) => c.id === activeCat));
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <div className="space-y-14">
-        {/* Langkah 1: pilih alas */}
-        <section>
-          <SectionTitle step={1} title="Pilih Alas" hint="Dasar parcel & kapasitasnya" />
-          {bases.length === 0 ? (
-            <EmptyNote>Belum ada alas tersedia.</EmptyNote>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {bases.map((b) => (
-                <BaseCard key={b.id} product={b} enabled={mounted} />
-              ))}
-            </div>
-          )}
-        </section>
+    <MatrixCtx.Provider value={matrix}>
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-14">
+          {/* Langkah 1: pilih alas */}
+          <section>
+            <SectionTitle step={1} title="Pilih Alas" hint="Dasar parcel" />
+            {bases.length === 0 ? (
+              <EmptyNote>Belum ada alas tersedia.</EmptyNote>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {bases.map((b) => (
+                  <BaseCard key={b.id} product={b} enabled={mounted} />
+                ))}
+              </div>
+            )}
+          </section>
 
-        {/* Langkah 2: isi item */}
-        <section>
-          <SectionTitle step={2} title="Isi Item" hint="Dupa · isian · pelengkap" />
-          <div className="mb-4 flex flex-wrap gap-2">
-            <FilterChip active={activeCat === null} onClick={() => setActiveCat(null)}>
-              Semua
-            </FilterChip>
-            {categories.map((c) => (
-              <FilterChip
-                key={c.id}
-                active={activeCat === c.id}
-                onClick={() => setActiveCat(c.id)}
-              >
-                {c.name}
+          {/* Langkah 2: pilih packing */}
+          <section>
+            <SectionTitle
+              step={2}
+              title="Pilih Packing"
+              hint="Menentukan kapasitas"
+            />
+            {packings.length === 0 ? (
+              <EmptyNote>Belum ada packing tersedia.</EmptyNote>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {packings.map((p) => (
+                  <PackingCard key={p.id} product={p} enabled={mounted} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Langkah 3: isi item */}
+          <section>
+            <SectionTitle step={3} title="Isi Item" hint="Dupa · isian · pelengkap" />
+            <div className="mb-4 flex flex-wrap gap-2">
+              <FilterChip active={activeCat === null} onClick={() => setActiveCat(null)}>
+                Semua
               </FilterChip>
-            ))}
-          </div>
-          {filteredItems.length === 0 ? (
-            <EmptyNote>Belum ada item di kategori ini.</EmptyNote>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {filteredItems.map((p) => (
-                <ItemCard key={p.id} product={p} enabled={mounted} />
+              {categories.map((c) => (
+                <FilterChip
+                  key={c.id}
+                  active={activeCat === c.id}
+                  onClick={() => setActiveCat(c.id)}
+                >
+                  {c.name}
+                </FilterChip>
               ))}
             </div>
-          )}
-        </section>
-      </div>
+            {filteredItems.length === 0 ? (
+              <EmptyNote>Belum ada item di kategori ini.</EmptyNote>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {filteredItems.map((p) => (
+                  <ItemCard key={p.id} product={p} enabled={mounted} />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
 
-      <div className="lg:sticky lg:top-[88px] lg:self-start">
-        {mounted ? <ParcelPanel /> : <ParcelSkeleton />}
+        <div className="lg:sticky lg:top-[88px] lg:self-start">
+          {mounted ? <ParcelPanel /> : <ParcelSkeleton />}
+        </div>
       </div>
-    </div>
+    </MatrixCtx.Provider>
   );
 }
 
@@ -211,25 +244,27 @@ function ProductImage({ product }: { product: Product }) {
 
 function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) {
   const base = useParcel((s) => s.base);
+  const packing = useParcel((s) => s.packing);
   const setBase = useParcel((s) => s.setBase);
   const items = useParcel((s) => s.items);
-  const clearItems = useParcel((s) => s.clear);
+  const removeItem = useParcel((s) => s.remove);
+  const matrix = useMatrix();
   const selected = enabled && base?.id === product.id;
 
   function choose() {
     if (!product.size) return;
     const hasItems = Object.keys(items).length > 0;
-    if (base && base.id !== product.id && hasItems) {
-      const cap = ALAS_CAPACITY[product.size];
+    if (base && base.id !== product.id && hasItems && packing) {
+      const cap = capacityFor(matrix, product.size, packing.size);
       const used = usedPoints(items);
       if (used > cap) {
         if (
           !confirm(
-            "Item di parcel melebihi kapasitas alas baru. Ganti alas akan mengosongkan item. Lanjut?"
+            "Item di parcel melebihi kapasitas kombinasi alas baru. Ganti alas akan mengosongkan item. Lanjut?"
           )
         )
           return;
-        clearItems();
+        Object.keys(items).forEach((id) => removeItem(Number(id)));
       }
     }
     setBase({
@@ -254,7 +289,7 @@ function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) 
         {product.size && (
           <div className="absolute left-2.5 top-2.5">
             <span className="rounded-full border border-[color:var(--line-strong)] bg-[rgba(30,6,11,0.6)] px-2.5 py-1 text-[10.5px] text-[color:var(--gold-hi)] backdrop-blur-sm">
-              Kapasitas {SIZE_LABELS[product.size]} · {ALAS_CAPACITY[product.size]} poin
+              Alas {SIZE_LABELS[product.size]}
             </span>
           </div>
         )}
@@ -280,28 +315,111 @@ function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) 
   );
 }
 
+function PackingCard({
+  product,
+  enabled,
+}: {
+  product: Product;
+  enabled: boolean;
+}) {
+  const base = useParcel((s) => s.base);
+  const packing = useParcel((s) => s.packing);
+  const setPacking = useParcel((s) => s.setPacking);
+  const items = useParcel((s) => s.items);
+  const removeItem = useParcel((s) => s.remove);
+  const matrix = useMatrix();
+  const selected = enabled && packing?.id === product.id;
+
+  function choose() {
+    if (!product.size) return;
+    const hasItems = Object.keys(items).length > 0;
+    if (packing && packing.id !== product.id && hasItems && base) {
+      const cap = capacityFor(matrix, base.size, product.size);
+      const used = usedPoints(items);
+      if (used > cap) {
+        if (
+          !confirm(
+            "Item di parcel melebihi kapasitas kombinasi packing baru. Ganti packing akan mengosongkan item. Lanjut?"
+          )
+        )
+          return;
+        Object.keys(items).forEach((id) => removeItem(Number(id)));
+      }
+    }
+    setPacking({
+      id: product.id,
+      name: product.name,
+      sellPrice: product.sellPrice,
+      imageUrl: product.imageUrl,
+      size: product.size,
+    });
+    toast.success(`Packing "${product.name}" dipilih.`);
+  }
+
+  return (
+    <Card
+      className={`gap-0 overflow-hidden p-0 transition hover:-translate-y-1 ${
+        selected ? "ring-2 ring-[color:var(--gold)]" : ""
+      }`}
+    >
+      <div className="relative">
+        <ProductImage product={product} />
+        {product.size && (
+          <div className="absolute left-2.5 top-2.5">
+            <span className="rounded-full border border-[color:var(--line-strong)] bg-[rgba(30,6,11,0.6)] px-2.5 py-1 text-[10.5px] text-[color:var(--gold-hi)] backdrop-blur-sm">
+              Packing {SIZE_LABELS[product.size]}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-3.5">
+        <p className="line-clamp-2 font-serif text-lg font-semibold leading-tight">
+          {product.name}
+        </p>
+        <p className="text-sm font-medium text-[color:var(--gold-hi)]">
+          {rupiah(product.sellPrice)}
+        </p>
+        <Button
+          size="sm"
+          className={`mt-auto ${selected ? "" : "btn-gold-grad"}`}
+          variant={selected ? "outline" : "default"}
+          disabled={!enabled}
+          onClick={choose}
+        >
+          {selected ? "✓ Terpilih" : "Pilih Packing"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function ItemCard({ product, enabled }: { product: Product; enabled: boolean }) {
   const base = useParcel((s) => s.base);
+  const packing = useParcel((s) => s.packing);
   const items = useParcel((s) => s.items);
   const add = useParcel((s) => s.add);
+  const matrix = useMatrix();
 
+  const ready = base != null && packing != null;
   const cost = product.size ? ITEM_POINTS[product.size] : 0;
-  const remaining = base ? capacityOf(base) - usedPoints(items) : null;
-  // Tidak muat: alas sudah dipilih tapi sisa poin < kebutuhan item ini.
+  const remaining = ready
+    ? capacityOf(base, packing, matrix) - usedPoints(items)
+    : null;
+  // Tidak muat: alas+packing sudah dipilih tapi sisa poin < kebutuhan item ini.
   const tooBig = remaining !== null && cost > remaining;
 
   function tryAdd() {
-    if (!base) {
-      toast.error("Pilih alas dulu sebelum menambah item.");
+    if (!base || !packing) {
+      toast.error("Pilih alas & packing dulu sebelum menambah item.");
       return;
     }
     if (!product.size) return;
-    const cap = capacityOf(base);
+    const cap = capacityOf(base, packing, matrix);
     const used = usedPoints(items);
     const cost = ITEM_POINTS[product.size];
     if (used + cost > cap) {
       toast.error(
-        `Kapasitas alas tidak cukup (sisa ${cap - used} poin, item ini butuh ${cost}).`
+        `Kapasitas tidak cukup (sisa ${cap - used} poin, item ini butuh ${cost}).`
       );
       return;
     }
@@ -405,6 +523,7 @@ function ParcelSkeleton() {
 
 function ParcelPanel() {
   const base = useParcel((s) => s.base);
+  const packing = useParcel((s) => s.packing);
   const items = useParcel((s) => s.items);
   const pcs = useParcel((s) => s.pcs);
   const deliveryDate = useParcel((s) => s.deliveryDate);
@@ -413,15 +532,17 @@ function ParcelPanel() {
   const setQty = useParcel((s) => s.setQty);
   const remove = useParcel((s) => s.remove);
   const clear = useParcel((s) => s.clear);
+  const matrix = useMatrix();
 
   const [warnOpen, setWarnOpen] = useState(false);
   const [coOpen, setCoOpen] = useState(false);
   const [payload, setPayload] = useState<CheckoutPayload | null>(null);
 
+  const ready = base != null && packing != null;
   const list = parcelItemList(items);
-  const unit = parcelUnitTotal(base, items);
-  const total = parcelTotal(base, items, pcs);
-  const cap = capacityOf(base);
+  const unit = parcelUnitTotal(base, packing, items);
+  const total = parcelTotal(base, packing, items, pcs);
+  const cap = capacityOf(base, packing, matrix);
   const used = usedPoints(items);
   const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
 
@@ -439,7 +560,7 @@ function ParcelPanel() {
 
   function increase(id: number, size: Size, qty: number) {
     if (used + ITEM_POINTS[size] > cap) {
-      toast.error("Kapasitas alas penuh.");
+      toast.error("Kapasitas parcel penuh.");
       return;
     }
     setQty(id, qty + 1);
@@ -456,6 +577,7 @@ function ParcelPanel() {
         : "Halo, saya mau pesan custom parcel ini:",
       "",
       `Alas: ${base.name} (${rupiah(base.sellPrice)})`,
+      packing ? `Packing: ${packing.name} (${rupiah(packing.sellPrice)})` : "",
       "Isi:",
       ...(lines.length ? lines : ["(belum ada item)"]),
       "",
@@ -477,9 +599,11 @@ function ParcelPanel() {
     if (!base) return;
     setPayload({
       kind: "CUSTOM",
-      summary: `Custom parcel: ${base.name} + ${list.length} item · ${pcs} pcs = ${rupiah(
-        total
-      )}${nego ? " (nego)" : ""}`,
+      summary: `Custom parcel: ${base.name}${
+        packing ? ` + ${packing.name}` : ""
+      } + ${list.length} item · ${pcs} pcs = ${rupiah(total)}${
+        nego ? " (nego)" : ""
+      }`,
       total,
       eventDate: dateChosen ? deliveryDate : null,
       waMessage: buildMessage(nego),
@@ -489,6 +613,10 @@ function ParcelPanel() {
 
   function checkout() {
     if (!base) return;
+    if (!packing) {
+      toast.error("Pilih packing dulu.");
+      return;
+    }
     if (!dateChosen) {
       toast.error("Pilih tanggal ambil/kirim dulu.");
       return;
@@ -538,23 +666,56 @@ function ParcelPanel() {
             </div>
           </div>
 
+          {/* Packing terpilih / prompt */}
+          {packing ? (
+            <div className="flex items-center gap-3 border-b p-4">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
+                {packing.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={packing.imageUrl}
+                    alt={packing.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                    <Package className="h-5 w-5" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Packing</p>
+                <p className="truncate text-sm font-medium">{packing.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {rupiah(packing.sellPrice)}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="border-b p-4 text-center text-sm text-muted-foreground">
+              Pilih packing untuk menentukan kapasitas.
+            </p>
+          )}
+
           {/* Meter kapasitas */}
-          <div className="space-y-1 border-b p-4">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Kapasitas terpakai</span>
-              <span className="font-medium">
-                {used} / {cap} poin
-              </span>
+          {ready && (
+            <div className="space-y-1 border-b p-4">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Kapasitas terpakai</span>
+                <span className="font-medium">
+                  {used} / {cap} poin
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    used >= cap ? "bg-destructive" : "bg-primary"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  used >= cap ? "bg-destructive" : "bg-primary"
-                }`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Item */}
           {list.length === 0 ? (

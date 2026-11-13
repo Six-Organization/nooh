@@ -19,12 +19,25 @@ enum Size {
 
 /// Jenis produk.
 /// COMPONENT = item satuan untuk rakit custom.
-/// ALAS = alas/base parcel (punya kapasitas + lead time tier).
+/// ALAS = alas/base parcel (dipilih di rakit, punya lead time tier).
+/// PACKING = pembungkus (dipilih di rakit bersama alas; kapasitas dari matrix alas×packing).
 /// BUNDLE = produk jadi/katalog (punya jenjang harga + lead time per pcs).
 enum ProductType {
   COMPONENT
   ALAS
+  PACKING
   BUNDLE
+}
+
+/// Matrix kapasitas rakit custom: kombinasi ukuran alas × ukuran packing → poin.
+/// 9 baris (3×3). Dikelola admin. Mengganti kapasitas lama yang murni dari alas.
+model CapacityRule {
+  id          Int  @id @default(autoincrement())
+  alasSize    Size
+  packingSize Size
+  capacity    Int // total poin kapasitas untuk kombinasi ini
+
+  @@unique([alasSize, packingSize])
 }
 
 /// Booking/lead customer: nomor WA + ringkasan pesanan.

@@ -1,5 +1,6 @@
 import { getCustomerProducts } from "@/lib/actions/products";
 import { getCategories } from "@/lib/actions/categories";
+import { getCapacityMatrix } from "@/lib/actions/capacity";
 import { CustomerStore } from "@/components/customer/customer-store";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
@@ -8,9 +9,10 @@ import { Ornament } from "@/components/brand/ornament";
 export const dynamic = "force-dynamic";
 
 export default async function RakitPage() {
-  const [products, categories] = await Promise.all([
+  const [products, categories, matrix] = await Promise.all([
     getCustomerProducts(),
     getCategories(),
+    getCapacityMatrix(),
   ]);
 
   return (
@@ -26,8 +28,9 @@ export default async function RakitPage() {
             Rakit Parcel Kamu
           </h1>
           <p className="mt-3 max-w-[56ch] text-sm font-light text-muted-foreground sm:text-base">
-            Pilih alas, isi dengan dupa Lavanya &amp; pelengkap, lihat estimasi
-            harga dan waktu pengerjaan, lalu pesan lewat WhatsApp.
+            Pilih alas &amp; packing (menentukan kapasitas), isi dengan dupa
+            Lavanya &amp; pelengkap, lihat estimasi harga dan waktu pengerjaan,
+            lalu pesan lewat WhatsApp.
           </p>
         </div>
       </section>
@@ -36,6 +39,7 @@ export default async function RakitPage() {
         <CustomerStore
           products={products}
           categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+          matrix={matrix}
         />
       </main>
 

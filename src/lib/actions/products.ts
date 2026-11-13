@@ -49,10 +49,10 @@ export async function getProducts() {
   });
 }
 
-/** Untuk halaman customer rakit (komponen + alas, tanpa HPP/modal). */
+/** Untuk halaman customer rakit (komponen + alas + packing, tanpa HPP/modal). */
 export async function getCustomerProducts() {
   return prisma.product.findMany({
-    where: { type: { in: ["COMPONENT", "ALAS"] } },
+    where: { type: { in: ["COMPONENT", "ALAS", "PACKING"] } },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -101,8 +101,10 @@ function validate(input: ProductInput) {
   if (!Number.isInteger(input.stock) || input.stock < 0)
     throw new Error("Stok tidak valid.");
 
-  if (input.type === "COMPONENT" && !input.size)
-    throw new Error("Item satuan wajib punya ukuran (kecil/sedang/besar).");
+  if ((input.type === "COMPONENT" || input.type === "PACKING") && !input.size)
+    throw new Error(
+      "Item satuan / packing wajib punya ukuran (kecil/sedang/besar)."
+    );
 
   if (input.type === "ALAS") {
     for (const t of input.leadTimeTiers) {
