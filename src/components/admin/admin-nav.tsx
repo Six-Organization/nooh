@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 const items = [
   { href: "/admin/products", label: "Produk" },
   { href: "/admin/categories", label: "Kategori" },
+  { href: "/admin/rakit", label: "Jenis Rakit" },
+  { href: "/admin/personalisasi", label: "Personalisasi" },
   { href: "/admin/kapasitas", label: "Kapasitas" },
   { href: "/admin/bookings", label: "Booking" },
 ];

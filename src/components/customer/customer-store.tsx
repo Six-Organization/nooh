@@ -58,6 +58,13 @@ import {
 type Category = { id: number; name: string };
 type LeadTier = { minQty: number; maxQty: number | null; days: number };
 type ProductType = "COMPONENT" | "ALAS" | "PACKING" | "BUNDLE";
+type PersField = {
+  id: number;
+  name: string;
+  kind: "SELECT" | "TEXT";
+  required: boolean;
+  options: { id: number; value: string }[];
+};
 type Product = {
   id: number;
   name: string;
@@ -104,12 +111,17 @@ export function CustomerStore({
   products,
   categories,
   matrix,
+  rakitTypeName,
+  fields = [],
 }: {
   products: Product[];
   categories: Category[];
   matrix: CapacityMatrix;
+  rakitTypeName?: string;
+  fields?: PersField[];
 }) {
   const [activeCat, setActiveCat] = useState<number | null>(null);
+  const [pers, setPers] = useState<Record<number, string>>({});
   const mounted = useMounted();
   const deliveryDate = useParcel((s) => s.deliveryDate);
   const setDeliveryDate = useParcel((s) => s.setDeliveryDate);
@@ -249,14 +261,82 @@ export function CustomerStore({
                 </div>
               )}
             </section>
+
+            {/* Langkah 4: personalisasi */}
+            {fields.length > 0 && (
+              <section>
+                <SectionTitle
+                  step={4}
+                  title="Personalisasi"
+                  hint="Kartu · pita · warna"
+                />
+                <Card className="gap-4 p-5">
+                  {fields.map((f) => (
+                    <PersonalizationInput
+                      key={f.id}
+                      field={f}
+                      value={pers[f.id] ?? ""}
+                      onChange={(v) =>
+                        setPers((prev) => ({ ...prev, [f.id]: v }))
+                      }
+                    />
+                  ))}
+                </Card>
+              </section>
+            )}
           </div>
 
           <div className="lg:sticky lg:top-[88px] lg:self-start">
-            <ParcelPanel />
+            <ParcelPanel
+              rakitTypeName={rakitTypeName}
+              fields={fields}
+              pers={pers}
+            />
           </div>
         </div>
       )}
     </MatrixCtx.Provider>
+  );
+}
+
+function PersonalizationInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: PersField;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={`pf-${field.id}`}>
+        {field.name}
+        {field.required && <span className="text-destructive"> *</span>}
+      </Label>
+      {field.kind === "SELECT" ? (
+        <select
+          id={`pf-${field.id}`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">— pilih —</option>
+          {field.options.map((o) => (
+            <option key={o.id} value={o.value}>
+              {o.value}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <Input
+          id={`pf-${field.id}`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Tulis di sini…"
+        />
+      )}
+    </div>
   );
 }
 
@@ -650,7 +730,15 @@ function ParcelSkeleton() {
   );
 }
 
-function ParcelPanel() {
+function ParcelPanel({
+  rakitTypeName,
+  fields = [],
+  pers = {},
+}: {
+  rakitTypeName?: string;
+  fields?: PersField[];
+  pers?: Record<number, string>;
+}) {
   const base = useParcel((s) => s.base);
   const packing = useParcel((s) => s.packing);
   const items = useParcel((s) => s.items);
@@ -686,6 +774,14 @@ function ParcelPanel() {
       earliest != null &&
       deliveryDate >= earliest);
 
+  const typeLabel = rakitTypeName ? rakitTypeName.toLowerCase() : "custom parcel";
+  const persList = fields
+    .map((f) => ({ name: f.name, value: (pers[f.id] ?? "").trim() }))
+    .filter((x) => x.value);
+  const missingRequired = fields.filter(
+    (f) => f.required && !(pers[f.id] ?? "").trim()
+  );
+
   function increase(id: number, size: Size, qty: number) {
     if (used + ITEM_POINTS[size] > cap) {
       toast.error("Kapasitas parcel penuh.");
@@ -701,13 +797,14 @@ function ParcelPanel() {
     );
     return [
       nego
-        ? "Halo, saya mau NEGO custom parcel (waktu agak mepet):"
-        : "Halo, saya mau pesan custom parcel ini:",
+        ? `Halo, saya mau NEGO ${typeLabel} (waktu agak mepet):`
+        : `Halo, saya mau pesan ${typeLabel} ini:`,
       "",
       `Alas: ${base.name} (${rupiah(base.sellPrice)})`,
       packing ? `Packing: ${packing.name} (${rupiah(packing.sellPrice)})` : "",
       "Isi:",
       ...(lines.length ? lines : ["(belum ada item)"]),
+      ...persList.map((p) => `${p.name}: ${p.value}`),
       "",
       `Jumlah: ${pcs} pcs`,
       `Tanggal diminta: ${dateChosen ? formatDateID(deliveryDate) : "-"}`,
@@ -725,11 +822,15 @@ function ParcelPanel() {
 
   function startCheckout(nego: boolean) {
     if (!base) return;
+    const label = rakitTypeName ?? "Custom parcel";
+    const persSummary = persList.length
+      ? ` · ${persList.map((p) => `${p.name}: ${p.value}`).join(", ")}`
+      : "";
     setPayload({
       kind: "CUSTOM",
-      summary: `Custom parcel: ${base.name}${
+      summary: `${label}: ${base.name}${
         packing ? ` + ${packing.name}` : ""
-      } + ${list.length} item · ${pcs} pcs = ${rupiah(total)}${
+      } + ${list.length} item · ${pcs} pcs = ${rupiah(total)}${persSummary}${
         nego ? " (nego)" : ""
       }`,
       total,
@@ -743,6 +844,10 @@ function ParcelPanel() {
     if (!base) return;
     if (!packing) {
       toast.error("Pilih packing dulu.");
+      return;
+    }
+    if (missingRequired.length > 0) {
+      toast.error(`Lengkapi: ${missingRequired.map((f) => f.name).join(", ")}.`);
       return;
     }
     if (!dateChosen) {

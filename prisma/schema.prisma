@@ -29,6 +29,12 @@ enum ProductType {
   BUNDLE
 }
 
+/// Jenis field personalisasi: pilih dari daftar, atau isi teks bebas.
+enum FieldKind {
+  SELECT
+  TEXT
+}
+
 /// Matrix kapasitas rakit custom: kombinasi ukuran alas × ukuran packing → poin.
 /// 9 baris (3×3). Dikelola admin. Mengganti kapasitas lama yang murni dari alas.
 model CapacityRule {
@@ -80,8 +86,47 @@ model Product {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   categories    Category[]     @relation("ProductCategories")
+  rakitTypes    RakitType[]    @relation("ProductRakitTypes") // jenis rakit yang memakai produk ini
   leadTimeTiers LeadTimeTier[] // waktu pengerjaan per jumlah pcs (khusus alas)
   quantityTiers QuantityTier[] // jenjang harga + lead time per pcs (khusus bundle)
+}
+
+/// Jenis rakitan custom (parcel, buket, dll) — dikelola admin.
+/// Semua jenis pakai mekanik sama (alas + packing + item berpoin + matrix).
+/// Bedanya: kumpulan produk yang tersedia + field personalisasi.
+model RakitType {
+  id          Int                    @id @default(autoincrement())
+  name        String
+  slug        String                 @unique
+  description String?
+  active      Boolean                @default(true)
+  sortOrder   Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  products    Product[]              @relation("ProductRakitTypes")
+  fields      PersonalizationField[] @relation("RakitTypeFields")
+}
+
+/// Field personalisasi (mis. "Warna Pita", "Tipe Kartu", "Pesan Kartu").
+/// SELECT = pilih dari options; TEXT = isi bebas. Dipakai di jenis rakit tertentu.
+model PersonalizationField {
+  id         Int                     @id @default(autoincrement())
+  name       String
+  kind       FieldKind               @default(SELECT)
+  required   Boolean                 @default(false)
+  sortOrder  Int                     @default(0)
+  rakitTypes RakitType[]             @relation("RakitTypeFields")
+  options    PersonalizationOption[]
+}
+
+/// Pilihan untuk field personalisasi bertipe SELECT (mis. "Merah", "Emas").
+model PersonalizationOption {
+  id        Int                  @id @default(autoincrement())
+  fieldId   Int
+  field     PersonalizationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  value     String
+  sortOrder Int                  @default(0)
+
+  @@index([fieldId])
 }
 
 /// Tier waktu pengerjaan alas: jumlah pcs -> berapa hari kerja.
