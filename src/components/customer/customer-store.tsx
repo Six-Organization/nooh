@@ -1,8 +1,22 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { toast } from "sonner";
-import { Plus, Minus, Trash2, ShoppingBasket, Send, Package } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingBasket,
+  Send,
+  Package,
+  CalendarDays,
+  Lock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -64,6 +78,28 @@ function useMatrix(): CapacityMatrix {
   return m;
 }
 
+const emptySubscribe = () => () => {};
+/** true hanya setelah hidrasi klien (aman untuk store yang dipersist). */
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+}
+
+function daysBetween(fromISO: string, toISODate: string): number {
+  const a = new Date(fromISO + "T00:00:00");
+  const b = new Date(toISODate + "T00:00:00");
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/** Lead time minimal sebuah alas (tier dengan hari terkecil). */
+function minLeadOf(tiers: LeadTier[]): number | null {
+  if (tiers.length === 0) return null;
+  return Math.min(...tiers.map((t) => t.days));
+}
+
 export function CustomerStore({
   products,
   categories,
@@ -74,8 +110,9 @@ export function CustomerStore({
   matrix: CapacityMatrix;
 }) {
   const [activeCat, setActiveCat] = useState<number | null>(null);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
+  const deliveryDate = useParcel((s) => s.deliveryDate);
+  const setDeliveryDate = useParcel((s) => s.setDeliveryDate);
 
   const bases = products.filter((p) => p.type === "ALAS");
   const packings = products.filter((p) => p.type === "PACKING");
@@ -85,75 +122,140 @@ export function CustomerStore({
       ? items
       : items.filter((p) => p.categories.some((c) => c.id === activeCat));
 
+  // Hindari mismatch hidrasi: tunggu mount (store dipersist di localStorage).
+  if (!mounted) {
+    return (
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <ParcelSkeleton />
+      </div>
+    );
+  }
+
+  const today = todayISO();
+  const dateChosen = deliveryDate !== "" && deliveryDate >= today;
+  const remainingDays = dateChosen ? daysBetween(today, deliveryDate) : null;
+
   return (
     <MatrixCtx.Provider value={matrix}>
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-14">
-          {/* Langkah 1: pilih alas */}
-          <section>
-            <SectionTitle step={1} title="Pilih Alas" hint="Dasar parcel" />
-            {bases.length === 0 ? (
-              <EmptyNote>Belum ada alas tersedia.</EmptyNote>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {bases.map((b) => (
-                  <BaseCard key={b.id} product={b} enabled={mounted} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Langkah 2: pilih packing */}
-          <section>
-            <SectionTitle
-              step={2}
-              title="Pilih Packing"
-              hint="Menentukan kapasitas"
+      {/* Langkah 0: tanggal acara dulu */}
+      <Card className="mb-8 gap-3 p-5">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5 text-[color:var(--gold-hi)]" />
+          <h2 className="font-semibold">Kapan acaramu?</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Pilih tanggal acara dulu. Kami tandai alas yang masih keburu
+          dikerjakan sampai tanggal itu.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="eventDate">Tanggal acara</Label>
+            <Input
+              id="eventDate"
+              type="date"
+              min={today}
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)}
+              className="w-[200px]"
             />
-            {packings.length === 0 ? (
-              <EmptyNote>Belum ada packing tersedia.</EmptyNote>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {packings.map((p) => (
-                  <PackingCard key={p.id} product={p} enabled={mounted} />
-                ))}
-              </div>
-            )}
-          </section>
+          </div>
+          {remainingDays !== null && (
+            <p className="pb-2 text-sm text-muted-foreground">
+              Sisa waktu:{" "}
+              <span className="font-medium text-foreground">
+                {remainingDays} hari
+              </span>{" "}
+              ({formatDateID(deliveryDate)})
+            </p>
+          )}
+        </div>
+      </Card>
 
-          {/* Langkah 3: isi item */}
-          <section>
-            <SectionTitle step={3} title="Isi Item" hint="Dupa · isian · pelengkap" />
-            <div className="mb-4 flex flex-wrap gap-2">
-              <FilterChip active={activeCat === null} onClick={() => setActiveCat(null)}>
-                Semua
-              </FilterChip>
-              {categories.map((c) => (
+      {remainingDays === null ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          Pilih tanggal acara di atas untuk mulai merakit.
+        </p>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="space-y-14">
+            {/* Langkah 1: pilih alas */}
+            <section>
+              <SectionTitle step={1} title="Pilih Alas" hint="Dasar parcel" />
+              {bases.length === 0 ? (
+                <EmptyNote>Belum ada alas tersedia.</EmptyNote>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {bases.map((b) => (
+                    <BaseCard
+                      key={b.id}
+                      product={b}
+                      enabled={mounted}
+                      remainingDays={remainingDays}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Langkah 2: pilih packing */}
+            <section>
+              <SectionTitle
+                step={2}
+                title="Pilih Packing"
+                hint="Menentukan kapasitas"
+              />
+              {packings.length === 0 ? (
+                <EmptyNote>Belum ada packing tersedia.</EmptyNote>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {packings.map((p) => (
+                    <PackingCard key={p.id} product={p} enabled={mounted} />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Langkah 3: isi item */}
+            <section>
+              <SectionTitle
+                step={3}
+                title="Isi Item"
+                hint="Dupa · isian · pelengkap"
+              />
+              <div className="mb-4 flex flex-wrap gap-2">
                 <FilterChip
-                  key={c.id}
-                  active={activeCat === c.id}
-                  onClick={() => setActiveCat(c.id)}
+                  active={activeCat === null}
+                  onClick={() => setActiveCat(null)}
                 >
-                  {c.name}
+                  Semua
                 </FilterChip>
-              ))}
-            </div>
-            {filteredItems.length === 0 ? (
-              <EmptyNote>Belum ada item di kategori ini.</EmptyNote>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {filteredItems.map((p) => (
-                  <ItemCard key={p.id} product={p} enabled={mounted} />
+                {categories.map((c) => (
+                  <FilterChip
+                    key={c.id}
+                    active={activeCat === c.id}
+                    onClick={() => setActiveCat(c.id)}
+                  >
+                    {c.name}
+                  </FilterChip>
                 ))}
               </div>
-            )}
-          </section>
-        </div>
+              {filteredItems.length === 0 ? (
+                <EmptyNote>Belum ada item di kategori ini.</EmptyNote>
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {filteredItems.map((p) => (
+                    <ItemCard key={p.id} product={p} enabled={mounted} />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
 
-        <div className="lg:sticky lg:top-[88px] lg:self-start">
-          {mounted ? <ParcelPanel /> : <ParcelSkeleton />}
+          <div className="lg:sticky lg:top-[88px] lg:self-start">
+            <ParcelPanel />
+          </div>
         </div>
-      </div>
+      )}
     </MatrixCtx.Provider>
   );
 }
@@ -242,7 +344,15 @@ function ProductImage({ product }: { product: Product }) {
   );
 }
 
-function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) {
+function BaseCard({
+  product,
+  enabled,
+  remainingDays,
+}: {
+  product: Product;
+  enabled: boolean;
+  remainingDays: number;
+}) {
   const base = useParcel((s) => s.base);
   const packing = useParcel((s) => s.packing);
   const setBase = useParcel((s) => s.setBase);
@@ -250,6 +360,9 @@ function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) 
   const removeItem = useParcel((s) => s.remove);
   const matrix = useMatrix();
   const selected = enabled && base?.id === product.id;
+
+  const minLead = minLeadOf(product.leadTimeTiers);
+  const tooLate = minLead != null && minLead > remainingDays;
 
   function choose() {
     if (!product.size) return;
@@ -280,9 +393,9 @@ function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) 
 
   return (
     <Card
-      className={`gap-0 overflow-hidden p-0 transition hover:-translate-y-1 ${
-        selected ? "ring-2 ring-[color:var(--gold)]" : ""
-      }`}
+      className={`gap-0 overflow-hidden p-0 transition ${
+        tooLate ? "opacity-60" : "hover:-translate-y-1"
+      } ${selected ? "ring-2 ring-[color:var(--gold)]" : ""}`}
     >
       <div className="relative">
         <ProductImage product={product} />
@@ -301,15 +414,31 @@ function BaseCard({ product, enabled }: { product: Product; enabled: boolean }) 
         <p className="text-sm font-medium text-[color:var(--gold-hi)]">
           {rupiah(product.sellPrice)}
         </p>
-        <Button
-          size="sm"
-          className={`mt-auto ${selected ? "" : "btn-gold-grad"}`}
-          variant={selected ? "outline" : "default"}
-          disabled={!enabled}
-          onClick={choose}
-        >
-          {selected ? "✓ Terpilih" : "Pilih Alas"}
-        </Button>
+        {tooLate ? (
+          <div className="mt-auto space-y-1">
+            <p className="text-[11px] text-destructive">
+              Butuh min {minLead} hari — tak keburu untuk tanggal ini.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="w-full cursor-not-allowed"
+              disabled
+            >
+              <Lock className="h-3.5 w-3.5" /> Tidak keburu
+            </Button>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            className={`mt-auto ${selected ? "" : "btn-gold-grad"}`}
+            variant={selected ? "outline" : "default"}
+            disabled={!enabled}
+            onClick={choose}
+          >
+            {selected ? "✓ Terpilih" : "Pilih Alas"}
+          </Button>
+        )}
       </div>
     </Card>
   );
@@ -528,7 +657,6 @@ function ParcelPanel() {
   const pcs = useParcel((s) => s.pcs);
   const deliveryDate = useParcel((s) => s.deliveryDate);
   const setPcs = useParcel((s) => s.setPcs);
-  const setDeliveryDate = useParcel((s) => s.setDeliveryDate);
   const setQty = useParcel((s) => s.setQty);
   const remove = useParcel((s) => s.remove);
   const clear = useParcel((s) => s.clear);
@@ -770,7 +898,7 @@ function ParcelPanel() {
             </ul>
           )}
 
-          {/* Jumlah & tanggal */}
+          {/* Jumlah & tanggal (tanggal dipilih di atas) */}
           <div className="space-y-3 border-t p-4">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
@@ -786,16 +914,12 @@ function ParcelPanel() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="date" className="text-xs">
-                  Tanggal ambil
-                </Label>
-                <Input
-                  id="date"
-                  type="date"
-                  min={todayISO()}
-                  value={deliveryDate}
-                  onChange={(e) => setDeliveryDate(e.target.value)}
-                />
+                <span className="text-xs text-muted-foreground">
+                  Tanggal acara
+                </span>
+                <p className="flex h-9 items-center text-sm font-medium">
+                  {dateChosen ? formatDateID(deliveryDate) : "-"}
+                </p>
               </div>
             </div>
             {hasTiers &&
