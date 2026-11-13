@@ -27,6 +27,23 @@ enum ProductType {
   BUNDLE
 }
 
+/// Booking/lead customer: nomor WA + ringkasan pesanan.
+/// Disimpan saat customer checkout (sebelum dibuka WhatsApp) untuk bahan
+/// broadcast nanti. `consent` = izin dihubungi untuk promo.
+model Booking {
+  id        Int      @id @default(autoincrement())
+  name      String?
+  whatsapp  String // nomor ternormalisasi (format 62..., hanya digit)
+  kind      String // "BUNDLE" | "CUSTOM"
+  summary   String // ringkasan pesanan (produk, pcs, dsb)
+  total     Int? // estimasi total (Rupiah)
+  eventDate String? // tanggal acara/ambil (yyyy-mm-dd)
+  consent   Boolean  @default(false) // izin dihubungi untuk promo/broadcast
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 /// Kategori/tag produk (mis. dupa, alas sok, isian). Dikelola admin.
 model Category {
   id        Int       @id @default(autoincrement())

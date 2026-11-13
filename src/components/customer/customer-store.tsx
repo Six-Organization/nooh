@@ -35,6 +35,10 @@ import {
   usedPoints,
   capacityOf,
 } from "@/store/parcel";
+import {
+  CheckoutDialog,
+  type CheckoutPayload,
+} from "@/components/customer/checkout-dialog";
 
 type Category = { id: number; name: string };
 type LeadTier = { minQty: number; maxQty: number | null; days: number };
@@ -411,6 +415,8 @@ function ParcelPanel() {
   const clear = useParcel((s) => s.clear);
 
   const [warnOpen, setWarnOpen] = useState(false);
+  const [coOpen, setCoOpen] = useState(false);
+  const [payload, setPayload] = useState<CheckoutPayload | null>(null);
 
   const list = parcelItemList(items);
   const unit = parcelUnitTotal(base, items);
@@ -467,16 +473,18 @@ function ParcelPanel() {
       .join("\n");
   }
 
-  function openWA(nego: boolean) {
-    const number = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER;
-    if (!number) {
-      toast.error("Nomor WhatsApp admin belum diatur.");
-      return;
-    }
-    const url = `https://wa.me/${number}?text=${encodeURIComponent(
-      buildMessage(nego)
-    )}`;
-    window.open(url, "_blank");
+  function startCheckout(nego: boolean) {
+    if (!base) return;
+    setPayload({
+      kind: "CUSTOM",
+      summary: `Custom parcel: ${base.name} + ${list.length} item · ${pcs} pcs = ${rupiah(
+        total
+      )}${nego ? " (nego)" : ""}`,
+      total,
+      eventDate: dateChosen ? deliveryDate : null,
+      waMessage: buildMessage(nego),
+    });
+    setCoOpen(true);
   }
 
   function checkout() {
@@ -489,7 +497,7 @@ function ParcelPanel() {
       setWarnOpen(true);
       return;
     }
-    openWA(false);
+    startCheckout(false);
   }
 
   return (
@@ -710,7 +718,7 @@ function ParcelPanel() {
             <Button
               onClick={() => {
                 setWarnOpen(false);
-                openWA(true);
+                startCheckout(true);
               }}
             >
               <Send className="h-4 w-4" /> Nego via WhatsApp
@@ -718,6 +726,8 @@ function ParcelPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CheckoutDialog open={coOpen} onOpenChange={setCoOpen} payload={payload} />
     </Card>
   );
 }

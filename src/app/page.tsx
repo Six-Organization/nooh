@@ -4,12 +4,15 @@ import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { Ornament } from "@/components/brand/ornament";
 import { Card } from "@/components/ui/card";
+import { getBundleProducts } from "@/lib/actions/products";
 
 export const metadata = {
   title: "NOOH — Souvenir & Hampers Bali",
   description:
     "Bokor, dulang, dan parcel upacara dirangkai tangan dengan dupa Lavanya. Rakit parcel istimewamu sendiri.",
 };
+
+export const dynamic = "force-dynamic";
 
 const GALLERY = [
   { src: "/assets/bokor-maroon.jpeg", title: "Bokor Ukir Maroon", desc: "Baki bundar klasik dengan ukiran emas." },
@@ -25,7 +28,15 @@ const FEATURES = [
   { icon: MessageCircle, title: "Pesan via WhatsApp", desc: "Checkout cepat dan bisa nego langsung dengan admin." },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const bundles = await getBundleProducts();
+  const bundleTiles = bundles
+    .filter((b) => b.imageUrl)
+    .map((b) => ({ src: b.imageUrl as string, title: b.name }));
+  const heroTiles = [...bundleTiles, ...GALLERY]
+    .slice(0, 4)
+    .map((t) => ({ src: t.src, title: t.title }));
+
   return (
     <>
       <SiteHeader />
@@ -74,18 +85,25 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Hero image */}
-          <div className="relative">
+          {/* Hero: etalase produk bundle → katalog */}
+          <Link href="/katalog" className="group relative block">
             <div className="absolute -inset-3 -z-10 rounded-[26px] bg-[color:var(--gold)] opacity-10 blur-2xl" />
-            <div className="overflow-hidden rounded-[22px] border border-[color:var(--line-strong)] shadow-[0_30px_70px_-30px_rgba(0,0,0,0.6)]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/assets/bokor-maroon.jpeg"
-                alt="Koleksi bokor ukir maroon & emas NOOH"
-                className="aspect-[4/5] w-full object-cover"
-              />
+            <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-[22px] border border-[color:var(--line-strong)] p-2 shadow-[0_30px_70px_-30px_rgba(0,0,0,0.6)]">
+              {heroTiles.map((t, i) => (
+                <div key={i} className="overflow-hidden rounded-[14px]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={t.src}
+                    alt={t.title}
+                    className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105"
+                  />
+                </div>
+              ))}
             </div>
-          </div>
+            <span className="btn-gold-grad absolute bottom-5 left-1/2 inline-flex -translate-x-1/2 items-center gap-2 rounded-full px-5 py-2.5 text-xs font-semibold shadow-lg">
+              Lihat Katalog <ArrowRight className="h-4 w-4" />
+            </span>
+          </Link>
         </div>
       </section>
 

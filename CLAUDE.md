@@ -16,12 +16,12 @@ Token theme-aware: `--gold`/`--gold-hi` (emas dalam di light untuk kontras teks)
 - Prisma 7 pakai driver adapter `@prisma/adapter-pg` (`src/lib/prisma.ts`) + generator baru `prisma-client` → output `src/generated/prisma` (gitignored; `postinstall: prisma generate`). Config di `prisma7.config.ts` (datasource hanya `url`).
 
 ## Struktur
-- `src/app/page.tsx` — **landing company profile** (statis): hero + foto, Tentang, Koleksi (galeri), Keunggulan, CTA. Foto di `public/assets/*.jpeg` (bokor/dulang).
+- `src/app/page.tsx` — **landing company profile** (`force-dynamic`): hero (kanan = kolase 2×2 produk **bundle** → klik ke `/katalog`, fallback foto `public/assets/*.jpeg`), Tentang, Koleksi (galeri), Keunggulan, CTA.
 - `src/app/rakit/page.tsx` — **penyusun parcel** custom (`force-dynamic`) → `src/components/customer/customer-store.tsx`
 - `src/app/katalog/page.tsx` — **katalog produk bundle/jadi** (`force-dynamic`) → `src/components/customer/bundle-catalog.tsx`. Alur: pilih **tanggal acara** dulu → produk difilter by sisa waktu (jenjang yang lead time-nya > sisa waktu dicoret) → input pcs → harga/pcs & total per jenjang → checkout WA / Nego WA.
 - Header/footer dipakai-ulang: `src/components/site/{site-header,site-footer}.tsx` (header punya CTA "Rakit Parcel" → `/rakit` + toggle tema + Admin)
-- `src/app/admin/login` — login; `src/app/admin/(dash)/{products,categories}` — dashboard (dilindungi `src/middleware.ts`). Products page punya stat tiles (total produk/alas/kategori/nilai stok). Nav aktif: `src/components/admin/admin-nav.tsx`. Form produk: `MoneyInput` (prefix Rp) + indikator untung/markup live; tabel dibungkus `overflow-x-auto` (responsif).
-- `src/lib/actions/{products,categories,auth}.ts` — server actions (cek `isAuthenticated()` untuk mutasi)
+- `src/app/admin/login` — login; `src/app/admin/(dash)/{products,categories,bookings}` — dashboard (dilindungi `src/middleware.ts`). **Bookings**: daftar nomor WA + ringkasan pesanan customer (model `Booking`), tombol salin nomor ber-consent (bekal broadcast). Products page punya stat tiles (total produk/alas/kategori/nilai stok). Nav aktif: `src/components/admin/admin-nav.tsx`. Form produk: `MoneyInput` (prefix Rp) + indikator untung/markup live; tabel dibungkus `overflow-x-auto` (responsif).
+- `src/lib/actions/{products,categories,auth,bookings}.ts` — server actions (cek `isAuthenticated()` untuk mutasi; `createBooking` publik). Checkout customer (katalog & rakit) lewat `src/components/customer/checkout-dialog.tsx`: minta nama + nomor WA + consent → simpan `Booking` → buka WhatsApp.
 - `src/store/parcel.ts` — Zustand (persist localStorage)
 - `src/app/api/upload/route.ts` — upload foto ke Vercel Blob
 

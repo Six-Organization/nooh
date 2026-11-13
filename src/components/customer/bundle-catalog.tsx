@@ -17,6 +17,10 @@ import {
   isOrderableWithinDays,
   type QtyTier,
 } from "@/lib/pricing";
+import {
+  CheckoutDialog,
+  type CheckoutPayload,
+} from "@/components/customer/checkout-dialog";
 
 type Category = { id: number; name: string };
 type BundleProduct = {
@@ -194,6 +198,8 @@ function BundleCard({
   eventDate: string;
 }) {
   const [pcs, setPcs] = useState("1");
+  const [coOpen, setCoOpen] = useState(false);
+  const [payload, setPayload] = useState<CheckoutPayload | null>(null);
   const qty = Number(pcs) || 0;
 
   const from = priceFrom(product.quantityTiers);
@@ -219,24 +225,22 @@ function BundleCard({
       .join("\n");
   }
 
-  function openWA(nego: boolean) {
-    const number = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER;
-    if (!number) {
-      toast.error("Nomor WhatsApp admin belum diatur.");
-      return;
-    }
-    const url = `https://wa.me/${number}?text=${encodeURIComponent(
-      buildMessage(nego)
-    )}`;
-    window.open(url, "_blank");
-  }
-
   function order() {
     if (qty < 1) {
       toast.error("Isi jumlah pcs dulu.");
       return;
     }
-    openWA(!feasible);
+    const nego = !feasible;
+    setPayload({
+      kind: "BUNDLE",
+      summary: `${product.name} · ${qty} pcs${
+        tier ? ` @ ${rupiah(tier.unitPrice)}` : ""
+      }${total != null ? ` = ${rupiah(total)}` : ""}${nego ? " (nego)" : ""}`,
+      total,
+      eventDate,
+      waMessage: buildMessage(nego),
+    });
+    setCoOpen(true);
   }
 
   return (
@@ -357,6 +361,8 @@ function BundleCard({
           {feasible ? "Pesan via WhatsApp" : "Nego via WhatsApp"}
         </Button>
       </div>
+
+      <CheckoutDialog open={coOpen} onOpenChange={setCoOpen} payload={payload} />
     </Card>
   );
 }
