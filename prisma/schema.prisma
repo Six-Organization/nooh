@@ -35,6 +35,12 @@ enum FieldKind {
   TEXT
 }
 
+/// Jenis media testimoni.
+enum MediaKind {
+  PHOTO
+  VIDEO
+}
+
 /// Matrix kapasitas rakit custom: kombinasi ukuran alas × ukuran packing → poin.
 /// 9 baris (3×3). Dikelola admin. Mengganti kapasitas lama yang murni dari alas.
 model CapacityRule {
@@ -44,6 +50,22 @@ model CapacityRule {
   capacity    Int // total poin kapasitas untuk kombinasi ini
 
   @@unique([alasSize, packingSize])
+}
+
+/// Testimoni (foto WebP / video WebM) untuk landing page.
+/// Video diputar otomatis (muted, loop, inline) di web. Dikelola admin.
+model Testimonial {
+  id        Int       @id @default(autoincrement())
+  name      String? // nama/pemberi testimoni (opsional)
+  caption   String? // keterangan singkat (opsional)
+  kind      MediaKind @default(PHOTO)
+  mediaUrl  String // URL foto (.webp) atau video (.webm) di Blob
+  posterUrl String? // poster/thumbnail untuk video (opsional)
+  active    Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([active, sortOrder])
 }
 
 /// Booking/lead customer: nomor WA + ringkasan pesanan.

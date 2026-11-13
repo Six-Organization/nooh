@@ -9,6 +9,7 @@ const items = [
   { href: "/admin/rakit", label: "Jenis Rakit" },
   { href: "/admin/personalisasi", label: "Personalisasi" },
   { href: "/admin/kapasitas", label: "Kapasitas" },
+  { href: "/admin/testimoni", label: "Testimoni" },
   { href: "/admin/bookings", label: "Booking" },
 ];
 

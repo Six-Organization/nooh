@@ -19,17 +19,27 @@ export async function POST(req: Request) {
 
   const form = await req.formData();
   const file = form.get("file");
+  const folderRaw = form.get("folder");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "File tidak ditemukan." }, { status: 400 });
   }
-  if (!file.type.startsWith("image/")) {
-    return NextResponse.json({ error: "File harus berupa gambar." }, { status: 400 });
+  const isImage = file.type.startsWith("image/");
+  const isVideo = file.type.startsWith("video/");
+  if (!isImage && !isVideo) {
+    return NextResponse.json(
+      { error: "File harus berupa gambar atau video." },
+      { status: 400 }
+    );
   }
 
+  // Folder di-whitelist agar tidak sembarang path.
+  const folder =
+    folderRaw === "testimonials" ? "testimonials" : "products";
+
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const blob = await put(`products/${Date.now()}-${safeName}`, file, {
+  const blob = await put(`${folder}/${Date.now()}-${safeName}`, file, {
     access: "public",
   });
 
-  return NextResponse.json({ url: blob.url });
+  return NextResponse.json({ url: blob.url, kind: isVideo ? "VIDEO" : "PHOTO" });
 }

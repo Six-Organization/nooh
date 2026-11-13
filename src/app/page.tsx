@@ -5,6 +5,8 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { Ornament } from "@/components/brand/ornament";
 import { Card } from "@/components/ui/card";
 import { getBundleProducts } from "@/lib/actions/products";
+import { getActiveTestimonials } from "@/lib/actions/testimonials";
+import { TestimonialsSection } from "@/components/customer/testimonials-section";
 
 export const metadata = {
   title: "NOOH — Souvenir & Hampers Bali",
@@ -29,7 +31,10 @@ const FEATURES = [
 ];
 
 export default async function LandingPage() {
-  const bundles = await getBundleProducts();
+  const [bundles, testimonials] = await Promise.all([
+    getBundleProducts(),
+    getActiveTestimonials(),
+  ]);
   const bundleTiles = bundles
     .filter((b) => b.imageUrl)
     .map((b) => ({ src: b.imageUrl as string, title: b.name }));
@@ -204,6 +209,9 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* TESTIMONI */}
+      <TestimonialsSection testimonials={testimonials} />
 
       {/* CTA */}
       <section className="relative overflow-hidden">
