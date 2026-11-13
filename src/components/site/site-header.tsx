@@ -6,8 +6,8 @@ type NavItem = { href: string; label: string };
 
 const DEFAULT_NAV: NavItem[] = [
   { href: "/", label: "Beranda" },
+  { href: "/katalog", label: "Katalog" },
   { href: "/#koleksi", label: "Koleksi" },
-  { href: "/#tentang", label: "Tentang" },
   { href: "/rakit", label: "Rakit Parcel" },
 ];
 

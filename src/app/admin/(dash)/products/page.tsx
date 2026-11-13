@@ -13,7 +13,8 @@ export default async function ProductsPage() {
   ]);
 
   const totalProduk = products.length;
-  const totalAlas = products.filter((p) => p.isBase).length;
+  const totalAlas = products.filter((p) => p.type === "ALAS").length;
+  const totalBundle = products.filter((p) => p.type === "BUNDLE").length;
   const totalKategori = categories.length;
   const nilaiStok = products.reduce((s, p) => s + p.hpp * p.stock, 0);
 
@@ -24,9 +25,10 @@ export default async function ProductsPage() {
         Kelola produk: modal (HPP), harga jual, stok, foto, ukuran, dan kategori.
       </p>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Total Produk" value={String(totalProduk)} />
         <StatTile label="Alas" value={String(totalAlas)} />
+        <StatTile label="Bundle" value={String(totalBundle)} />
         <StatTile label="Kategori" value={String(totalKategori)} />
         <StatTile label="Nilai Stok (modal)" value={rupiah(nilaiStok)} />
       </div>
@@ -41,11 +43,18 @@ export default async function ProductsPage() {
           imageUrl: p.imageUrl,
           size: p.size,
           isBase: p.isBase,
+          type: p.type,
           categories: p.categories.map((c) => ({ id: c.id, name: c.name })),
           leadTimeTiers: p.leadTimeTiers.map((t) => ({
             minQty: t.minQty,
             maxQty: t.maxQty,
             days: t.days,
+          })),
+          quantityTiers: p.quantityTiers.map((t) => ({
+            minQty: t.minQty,
+            maxQty: t.maxQty,
+            unitPrice: t.unitPrice,
+            leadDays: t.leadDays,
           })),
         }))}
         categories={categories.map((c) => ({ id: c.id, name: c.name }))}

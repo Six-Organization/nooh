@@ -17,6 +17,16 @@ enum Size {
   BESAR
 }
 
+/// Jenis produk.
+/// COMPONENT = item satuan untuk rakit custom.
+/// ALAS = alas/base parcel (punya kapasitas + lead time tier).
+/// BUNDLE = produk jadi/katalog (punya jenjang harga + lead time per pcs).
+enum ProductType {
+  COMPONENT
+  ALAS
+  BUNDLE
+}
+
 /// Kategori/tag produk (mis. dupa, alas sok, isian). Dikelola admin.
 model Category {
   id        Int       @id @default(autoincrement())
@@ -35,11 +45,13 @@ model Product {
   stock         Int            @default(0)
   imageUrl      String? // URL foto produk (Vercel Blob)
   size          Size? // ukuran item / kapasitas alas
-  isBase        Boolean        @default(false) // true = alas (base parcel)
+  isBase        Boolean        @default(false) // true = alas (base parcel). Disinkronkan dgn type=ALAS.
+  type          ProductType    @default(COMPONENT) // jenis produk (lihat enum ProductType)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   categories    Category[]     @relation("ProductCategories")
   leadTimeTiers LeadTimeTier[] // waktu pengerjaan per jumlah pcs (khusus alas)
+  quantityTiers QuantityTier[] // jenjang harga + lead time per pcs (khusus bundle)
 }
 
 /// Tier waktu pengerjaan alas: jumlah pcs -> berapa hari kerja.
@@ -51,6 +63,22 @@ model LeadTimeTier {
   minQty    Int // batas bawah jumlah pcs (inklusif)
   maxQty    Int? // batas atas (inklusif); null = tanpa batas atas
   days      Int // estimasi hari pengerjaan (hari kalender)
+
+  @@index([productId])
+}
+
+/// Jenjang (bracket) produk bundle berdasarkan jumlah pcs.
+/// Satu baris = satu rentang pcs dengan harga/pcs dan lead time-nya.
+/// mis. 1-9 = Rp150rb/7hari, 10-49 = Rp130rb/14hari, 100+ = Rp100rb/30hari.
+/// Tidak ada minimum order: bracket paling bawah mulai dari minQty=1.
+model QuantityTier {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty    Int // batas bawah jumlah pcs (inklusif)
+  maxQty    Int? // batas atas (inklusif); null = tanpa batas atas
+  unitPrice Int // harga jual per pcs di bracket ini (Rupiah)
+  leadDays  Int // minimal hari sebelum hari-H untuk jumlah ini
 
   @@index([productId])
 }

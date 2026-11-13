@@ -32,14 +32,26 @@ import {
 } from "@/lib/actions/products";
 
 type Size = "KECIL" | "SEDANG" | "BESAR";
+type ProductType = "COMPONENT" | "ALAS" | "BUNDLE";
 const SIZE_LABELS: Record<Size, string> = {
   KECIL: "Kecil",
   SEDANG: "Sedang",
   BESAR: "Besar",
 };
+const TYPE_LABELS: Record<ProductType, string> = {
+  COMPONENT: "Komponen",
+  ALAS: "Alas",
+  BUNDLE: "Bundle",
+};
 
 type Category = { id: number; name: string };
 type LeadTier = { minQty: number; maxQty: number | null; days: number };
+type QtyTier = {
+  minQty: number;
+  maxQty: number | null;
+  unitPrice: number;
+  leadDays: number;
+};
 type Product = {
   id: number;
   name: string;
@@ -49,8 +61,10 @@ type Product = {
   imageUrl: string | null;
   size: Size | null;
   isBase: boolean;
+  type: ProductType;
   categories: Category[];
   leadTimeTiers: LeadTier[];
+  quantityTiers: QtyTier[];
 };
 
 export function ProductManager({
@@ -160,9 +174,16 @@ export function ProductManager({
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {p.isBase && <Badge>Alas</Badge>}
+                      <Badge variant={p.type === "COMPONENT" ? "outline" : "default"}>
+                        {TYPE_LABELS[p.type]}
+                      </Badge>
                       {p.size && (
                         <Badge variant="outline">{SIZE_LABELS[p.size]}</Badge>
+                      )}
+                      {p.type === "BUNDLE" && (
+                        <Badge variant="secondary">
+                          {p.quantityTiers.length} jenjang
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
@@ -179,6 +200,9 @@ export function ProductManager({
                     {rupiah(p.hpp)}
                   </TableCell>
                   <TableCell className="text-right font-medium">
+                    {p.type === "BUNDLE" ? (
+                      <span className="text-muted-foreground">dari </span>
+                    ) : null}
                     {rupiah(p.sellPrice)}
                   </TableCell>
                   <TableCell className="text-right">{p.stock}</TableCell>
@@ -231,9 +255,11 @@ function ProductForm({
   const [selectedCats, setSelectedCats] = useState<number[]>(
     product?.categories.map((c) => c.id) ?? []
   );
-  const [isBase, setIsBase] = useState(product?.isBase ?? false);
+  const [type, setType] = useState<ProductType>(
+    product?.type ?? (product?.isBase ? "ALAS" : "COMPONENT")
+  );
   const [size, setSize] = useState<Size | "">(product?.size ?? "");
-  const [tiers, setTiers] = useState<
+  const [leadTiers, setLeadTiers] = useState<
     { minQty: string; maxQty: string; days: string }[]
   >(
     product?.leadTimeTiers.map((t) => ({
@@ -242,23 +268,62 @@ function ProductForm({
       days: String(t.days),
     })) ?? []
   );
+  const [qtyTiers, setQtyTiers] = useState<
+    { minQty: string; maxQty: string; unitPrice: string; leadDays: string }[]
+  >(
+    product?.quantityTiers.map((t) => ({
+      minQty: String(t.minQty),
+      maxQty: t.maxQty == null ? "" : String(t.maxQty),
+      unitPrice: String(t.unitPrice),
+      leadDays: String(t.leadDays),
+    })) ?? []
+  );
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const isBundle = type === "BUNDLE";
+  const isAlas = type === "ALAS";
+  const isComponent = type === "COMPONENT";
 
   const profit = (Number(sellPrice) || 0) - (Number(hpp) || 0);
   const markup =
     Number(hpp) > 0 ? Math.round((profit / Number(hpp)) * 100) : null;
 
-  function addTier() {
-    setTiers((prev) => [...prev, { minQty: "", maxQty: "", days: "" }]);
+  // --- Lead time tiers (ALAS) ---
+  function addLeadTier() {
+    setLeadTiers((prev) => [...prev, { minQty: "", maxQty: "", days: "" }]);
   }
-  function updateTier(i: number, field: "minQty" | "maxQty" | "days", val: string) {
-    setTiers((prev) =>
+  function updateLeadTier(
+    i: number,
+    field: "minQty" | "maxQty" | "days",
+    val: string
+  ) {
+    setLeadTiers((prev) =>
       prev.map((t, idx) => (idx === i ? { ...t, [field]: val } : t))
     );
   }
-  function removeTier(i: number) {
-    setTiers((prev) => prev.filter((_, idx) => idx !== i));
+  function removeLeadTier(i: number) {
+    setLeadTiers((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  // --- Quantity tiers (BUNDLE) ---
+  function addQtyTier() {
+    setQtyTiers((prev) => [
+      ...prev,
+      { minQty: "", maxQty: "", unitPrice: "", leadDays: "" },
+    ]);
+  }
+  function updateQtyTier(
+    i: number,
+    field: "minQty" | "maxQty" | "unitPrice" | "leadDays",
+    val: string
+  ) {
+    setQtyTiers((prev) =>
+      prev.map((t, idx) => (idx === i ? { ...t, [field]: val } : t))
+    );
+  }
+  function removeQtyTier(i: number) {
+    setQtyTiers((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function toggleCat(id: number) {
@@ -286,27 +351,52 @@ function ProductForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isBase && !size) {
-      toast.error("Item non-alas wajib punya ukuran.");
+
+    if (isComponent && !size) {
+      toast.error("Item satuan wajib punya ukuran.");
       return;
     }
-    const parsedTiers = isBase
-      ? tiers.map((t) => ({
+
+    const parsedLead = isAlas
+      ? leadTiers.map((t) => ({
           minQty: Number(t.minQty),
           maxQty: t.maxQty.trim() === "" ? null : Number(t.maxQty),
           days: Number(t.days),
         }))
       : [];
+
+    const parsedQty = isBundle
+      ? qtyTiers.map((t) => ({
+          minQty: Number(t.minQty),
+          maxQty: t.maxQty.trim() === "" ? null : Number(t.maxQty),
+          unitPrice: Number(t.unitPrice),
+          leadDays: Number(t.leadDays),
+        }))
+      : [];
+
+    if (isBundle && parsedQty.length === 0) {
+      toast.error("Produk bundle wajib punya minimal 1 jenjang harga.");
+      return;
+    }
+
+    // Bundle: harga jual = harga terendah (buat tampilan "mulai dari").
+    const effectiveSell = isBundle
+      ? parsedQty.length
+        ? Math.min(...parsedQty.map((t) => t.unitPrice || 0))
+        : 0
+      : Number(sellPrice);
+
     const input: ProductInput = {
       name,
       hpp: Number(hpp),
-      sellPrice: Number(sellPrice),
+      sellPrice: effectiveSell,
       stock: Number(stock),
       imageUrl,
-      size: size === "" ? null : size,
-      isBase,
+      size: isBundle ? null : size === "" ? null : size,
+      type,
       categoryIds: selectedCats,
-      leadTimeTiers: parsedTiers,
+      leadTimeTiers: parsedLead,
+      quantityTiers: parsedQty,
     };
     setSaving(true);
     try {
@@ -337,28 +427,46 @@ function ProductForm({
         />
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="ptype">Tipe produk</Label>
+        <select
+          id="ptype"
+          value={type}
+          onChange={(e) => setType(e.target.value as ProductType)}
+          className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="COMPONENT">Komponen (item satuan untuk rakit)</option>
+          <option value="ALAS">Alas (base parcel)</option>
+          <option value="BUNDLE">Bundle (produk jadi / katalog)</option>
+        </select>
+        <p className="text-xs text-muted-foreground">
+          {isBundle
+            ? "Harga & waktu diatur per jenjang jumlah pcs di bawah."
+            : isAlas
+            ? "Alas punya kapasitas + waktu pengerjaan per pcs."
+            : "Komponen dipakai di halaman rakit custom."}
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label htmlFor="hpp">HPP / modal</Label>
-          <MoneyInput
-            id="hpp"
-            value={hpp}
-            onChange={setHpp}
-            required
-          />
+          <MoneyInput id="hpp" value={hpp} onChange={setHpp} required />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="sell">Harga jual</Label>
-          <MoneyInput
-            id="sell"
-            value={sellPrice}
-            onChange={setSellPrice}
-            required
-          />
-        </div>
+        {!isBundle && (
+          <div className="space-y-2">
+            <Label htmlFor="sell">Harga jual</Label>
+            <MoneyInput
+              id="sell"
+              value={sellPrice}
+              onChange={setSellPrice}
+              required
+            />
+          </div>
+        )}
       </div>
 
-      {hpp !== "" && sellPrice !== "" && (
+      {!isBundle && hpp !== "" && sellPrice !== "" && (
         <p
           className={`-mt-1 text-xs ${
             profit < 0 ? "text-destructive" : "text-muted-foreground"
@@ -391,107 +499,222 @@ function ProductForm({
         />
       </div>
 
-      <div className="space-y-3 rounded-lg border p-3">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={isBase}
-            onChange={(e) => setIsBase(e.target.checked)}
-            className="h-4 w-4 accent-primary"
-          />
-          Produk ini adalah alas (base parcel)
-        </label>
-        <div className="space-y-2">
-          <Label htmlFor="size">
-            {isBase ? "Kapasitas alas" : "Ukuran item"}
-          </Label>
-          <select
-            id="size"
-            value={size}
-            onChange={(e) => setSize(e.target.value as Size | "")}
-            className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">
-              {isBase ? "— pilih kapasitas —" : "— pilih ukuran (wajib) —"}
-            </option>
-            <option value="KECIL">Kecil</option>
-            <option value="SEDANG">Sedang</option>
-            <option value="BESAR">Besar</option>
-          </select>
-          {!isBase && (
-            <p className="text-xs text-muted-foreground">
-              Item non-alas wajib punya ukuran.
-            </p>
-          )}
-        </div>
-
-        {isBase && (
-          <div className="space-y-2 border-t pt-3">
-            <div className="flex items-center justify-between">
-              <Label>Waktu pengerjaan (per pcs)</Label>
-              <Button type="button" size="sm" variant="outline" onClick={addTier}>
-                <Plus className="h-3 w-3" /> Tier
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Contoh: 1–10 pcs = 3 hari, 11–50 pcs = 7 hari. Kosongkan &quot;maks&quot;
-              untuk tanpa batas atas (mis. 51+).
-            </p>
-            {tiers.length === 0 ? (
+      {/* Ukuran — untuk komponen & alas */}
+      {!isBundle && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-2">
+            <Label htmlFor="size">
+              {isAlas ? "Kapasitas alas" : "Ukuran item"}
+            </Label>
+            <select
+              id="size"
+              value={size}
+              onChange={(e) => setSize(e.target.value as Size | "")}
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">
+                {isAlas ? "— pilih kapasitas —" : "— pilih ukuran (wajib) —"}
+              </option>
+              <option value="KECIL">Kecil</option>
+              <option value="SEDANG">Sedang</option>
+              <option value="BESAR">Besar</option>
+            </select>
+            {isComponent && (
               <p className="text-xs text-muted-foreground">
-                Belum ada tier. Tanpa tier, alas bisa dipesan kapan saja tanpa
-                cek waktu.
+                Item satuan wajib punya ukuran.
               </p>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2 text-xs text-muted-foreground">
-                  <span className="flex-1">Min pcs</span>
-                  <span className="flex-1">Maks pcs</span>
-                  <span className="flex-1">Hari</span>
-                  <span className="w-8" />
-                </div>
-                {tiers.map((t, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="1"
-                      value={t.minQty}
-                      onChange={(e) => updateTier(i, "minQty", e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="∞"
-                      value={t.maxQty}
-                      onChange={(e) => updateTier(i, "maxQty", e.target.value)}
-                      className="flex-1"
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="hari"
-                      value={t.days}
-                      onChange={(e) => updateTier(i, "days", e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="w-8 shrink-0"
-                      onClick={() => removeTier(i)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
-        )}
-      </div>
+
+          {isAlas && (
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <Label>Waktu pengerjaan (per pcs)</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addLeadTier}
+                >
+                  <Plus className="h-3 w-3" /> Tier
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Contoh: 1–10 pcs = 3 hari, 11–50 pcs = 7 hari. Kosongkan
+                &quot;maks&quot; untuk tanpa batas atas (mis. 51+).
+              </p>
+              {leadTiers.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Belum ada tier. Tanpa tier, alas bisa dipesan kapan saja tanpa
+                  cek waktu.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-2 text-xs text-muted-foreground">
+                    <span className="flex-1">Min pcs</span>
+                    <span className="flex-1">Maks pcs</span>
+                    <span className="flex-1">Hari</span>
+                    <span className="w-8" />
+                  </div>
+                  {leadTiers.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="1"
+                        value={t.minQty}
+                        onChange={(e) =>
+                          updateLeadTier(i, "minQty", e.target.value)
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="∞"
+                        value={t.maxQty}
+                        onChange={(e) =>
+                          updateLeadTier(i, "maxQty", e.target.value)
+                        }
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="hari"
+                        value={t.days}
+                        onChange={(e) =>
+                          updateLeadTier(i, "days", e.target.value)
+                        }
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="w-8 shrink-0"
+                        onClick={() => removeLeadTier(i)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Jenjang harga + lead time — untuk bundle */}
+      {isBundle && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between">
+            <Label>Jenjang harga &amp; waktu (per pcs)</Label>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={addQtyTier}
+            >
+              <Plus className="h-3 w-3" /> Jenjang
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Mulai dari 1 pcs, nyambung tanpa celah. Jenjang terakhir kosongkan
+            &quot;maks&quot; (tanpa batas atas). Makin banyak biasanya harga/pcs
+            turun &amp; hari lebih panjang.
+          </p>
+          {qtyTiers.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Belum ada jenjang. Tambah minimal satu (mis. 1–∞).
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <span className="w-[52px]">Min</span>
+                <span className="w-[52px]">Maks</span>
+                <span className="flex-1">Harga/pcs</span>
+                <span className="w-[52px]">Hari</span>
+                <span className="w-7" />
+              </div>
+              {qtyTiers.map((t, i) => {
+                const up = Number(t.unitPrice) || 0;
+                const perProfit = up - (Number(hpp) || 0);
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="1"
+                        value={t.minQty}
+                        onChange={(e) =>
+                          updateQtyTier(i, "minQty", e.target.value)
+                        }
+                        className="w-[52px] px-2"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="∞"
+                        value={t.maxQty}
+                        onChange={(e) =>
+                          updateQtyTier(i, "maxQty", e.target.value)
+                        }
+                        className="w-[52px] px-2"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        placeholder="Rp/pcs"
+                        value={t.unitPrice}
+                        onChange={(e) =>
+                          updateQtyTier(i, "unitPrice", e.target.value)
+                        }
+                        className="flex-1 tabular-nums"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="hari"
+                        value={t.leadDays}
+                        onChange={(e) =>
+                          updateQtyTier(i, "leadDays", e.target.value)
+                        }
+                        className="w-[52px] px-2"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="w-7 shrink-0"
+                        onClick={() => removeQtyTier(i)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    {t.unitPrice !== "" && hpp !== "" && (
+                      <p
+                        className={`pl-1 text-xs ${
+                          perProfit < 0
+                            ? "text-destructive"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {perProfit < 0
+                          ? "harga di bawah modal"
+                          : `untung ${rupiah(perProfit)}/pcs`}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Kategori</Label>

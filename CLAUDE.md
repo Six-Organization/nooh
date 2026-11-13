@@ -17,7 +17,8 @@ Token theme-aware: `--gold`/`--gold-hi` (emas dalam di light untuk kontras teks)
 
 ## Struktur
 - `src/app/page.tsx` — **landing company profile** (statis): hero + foto, Tentang, Koleksi (galeri), Keunggulan, CTA. Foto di `public/assets/*.jpeg` (bokor/dulang).
-- `src/app/rakit/page.tsx` — **penyusun parcel** (`force-dynamic`) → `src/components/customer/customer-store.tsx`
+- `src/app/rakit/page.tsx` — **penyusun parcel** custom (`force-dynamic`) → `src/components/customer/customer-store.tsx`
+- `src/app/katalog/page.tsx` — **katalog produk bundle/jadi** (`force-dynamic`) → `src/components/customer/bundle-catalog.tsx`. Alur: pilih **tanggal acara** dulu → produk difilter by sisa waktu (jenjang yang lead time-nya > sisa waktu dicoret) → input pcs → harga/pcs & total per jenjang → checkout WA / Nego WA.
 - Header/footer dipakai-ulang: `src/components/site/{site-header,site-footer}.tsx` (header punya CTA "Rakit Parcel" → `/rakit` + toggle tema + Admin)
 - `src/app/admin/login` — login; `src/app/admin/(dash)/{products,categories}` — dashboard (dilindungi `src/middleware.ts`). Products page punya stat tiles (total produk/alas/kategori/nilai stok). Nav aktif: `src/components/admin/admin-nav.tsx`. Form produk: `MoneyInput` (prefix Rp) + indikator untung/markup live; tabel dibungkus `overflow-x-auto` (responsif).
 - `src/lib/actions/{products,categories,auth}.ts` — server actions (cek `isAuthenticated()` untuk mutasi)
@@ -25,7 +26,7 @@ Token theme-aware: `--gold`/`--gold-hi` (emas dalam di light untuk kontras teks)
 - `src/app/api/upload/route.ts` — upload foto ke Vercel Blob
 
 ## Data
-Model `Product` (name, hpp, sellPrice, stock, imageUrl?, `size` enum `Size?`, `isBase` bool) ↔ `Category` (many-to-many). Alas (`isBase=true`) juga punya `LeadTimeTier[]` (waktu pengerjaan: `{minQty, maxQty?, days}`, `maxQty` null = tanpa batas atas). `size` = ukuran item / kapasitas alas. Item non-alas wajib punya `size` (divalidasi di `products.ts` & form). Migrasi: `npx prisma migrate dev`.
+Model `Product` (name, hpp, sellPrice, stock, imageUrl?, `size` enum `Size?`, `isBase` bool, `type` enum `ProductType`) ↔ `Category` (many-to-many). **`ProductType`**: `COMPONENT` (item satuan untuk rakit custom), `ALAS` (base parcel), `BUNDLE` (produk jadi/katalog). `isBase` disinkron otomatis dengan `type=ALAS` (server action set keduanya). Alas punya `LeadTimeTier[]` (`{minQty, maxQty?, days}`). Bundle punya `QuantityTier[]` (`{minQty, maxQty?, unitPrice, leadDays}`) — jenjang harga+lead time per pcs; divalidasi di `products.ts` (mulai dari 1, nyambung tanpa celah, tepat satu tanpa batas atas). Bundle `sellPrice` diisi otomatis = harga jenjang terendah (tampilan "mulai dari"), `size` null. Helper harga bundle: `src/lib/pricing.ts` (`tierFor`, `bundleTotal`, `priceFrom`, `maxQtyWithinDays`, `isOrderableWithinDays`). `maxQty` null = tanpa batas atas. Item `COMPONENT` wajib punya `size`. Migrasi: `npx prisma migrate dev`.
 
 ## Aturan parcel (customer)
 1 alas per parcel + sistem **poin**. Angka di `src/lib/capacity.ts`: `ITEM_POINTS` (kecil=1, sedang=2, besar=3), `ALAS_CAPACITY` (kecil=4, sedang=8, besar=12). Customer pilih alas → isi item (total poin ≤ kapasitas) → isi **pcs** & **tanggal ambil**. Waktu pengerjaan dihitung dari tier alas sesuai pcs (helper `src/lib/leadtime.ts`, hari kalender). Kalau `tanggal < hari ini + leadDays` → popup blokir checkout + tombol "Nego via WA". Total = (alas + item) × pcs. Semua di `customer-store.tsx`.
