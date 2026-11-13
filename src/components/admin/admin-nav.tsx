@@ -11,6 +11,7 @@ const items = [
   { href: "/admin/kapasitas", label: "Kapasitas" },
   { href: "/admin/testimoni", label: "Testimoni" },
   { href: "/admin/bookings", label: "Booking" },
+  { href: "/admin/broadcast", label: "Broadcast" },
 ];
 
 export function AdminNav() {

@@ -33,4 +33,7 @@ Model `Product` (name, hpp, sellPrice, stock, imageUrl?, `size` enum `Size?`, `i
 1 alas + **1 packing** per parcel + sistem **poin**. `src/lib/capacity.ts`: `ITEM_POINTS` (kecil=1, sedang=2, besar=3). **Kapasitas = matrix kombinasi ukuran alas × ukuran packing** (`capacityFor`), bukan lagi `ALAS_CAPACITY` (konstanta lama masih ada tapi tak dipakai custom). Matrix disimpan di model `CapacityRule` (9 baris 3×3), default `DEFAULT_CAPACITY_MATRIX` kalau DB kosong; dikelola admin di `/admin/kapasitas` (`src/lib/actions/capacity.ts`). Customer: **pilih tanggal acara dulu** (gate di depan) → pilih alas (alas yang lead-time minimalnya > sisa waktu dikunci "Tidak keburu") → pilih packing → isi item (total poin ≤ kapasitas matrix) → isi **pcs**. Waktu pengerjaan dari tier alas sesuai pcs (`src/lib/leadtime.ts`). Kalau `tanggal < hari ini + leadDays` → popup blokir + "Nego via WA". Total = (alas + packing + item) × pcs. Store `src/store/parcel.ts` (punya `base`, `packing`, `items`, `deliveryDate`); UI `customer-store.tsx` (matrix via context, `getCapacityMatrix` dari `rakit/page.tsx`; guard hidrasi `useSyncExternalStore`).
 
 ## Env (`.env`, contoh di `.env.example`)
-`DATABASE_URL`, `DIRECT_URL`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `NEXT_PUBLIC_WHATSAPP_NUMBER`, `BLOB_READ_WRITE_TOKEN`.
+`DATABASE_URL`, `DIRECT_URL`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `NEXT_PUBLIC_WHATSAPP_NUMBER`, `BLOB_READ_WRITE_TOKEN`, `FONNTE_TOKEN` (opsional, broadcast WA via Fonnte).
+
+## Broadcast WA
+`/admin/broadcast` (`src/lib/actions/broadcast.ts`): kirim pesan ke nomor ber-consent dari `Booking` lewat gateway **Fonnte** (`FONNTE_TOKEN`). Hanya jalan saat admin menekan tombol (tidak otomatis). Tanpa token → UI tampil tapi kirim dinonaktifkan (bisa salin nomor untuk manual).
